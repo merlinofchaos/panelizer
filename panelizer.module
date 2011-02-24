@@ -1,0 +1,705 @@
+<?php
+// $Id: panelize.module,v 1.5.2.28 2010/10/29 21:50:22 merlinofchaos Exp $
+
+
+/**
+ * @file panelize.module
+ *
+ */
+
+// ---------------------------------------------------------------------------
+// General Drupal hooks
+
+/**
+ * Implementation of hook_perm().
+ */
+function panelizer_perm() {
+  return array('administer panelizerr');
+}
+
+/**
+ * Implements hook_theme()
+ */
+function panelizer_theme() {
+  $items = array();
+  $items['panelizer_node_settings_page_form'] = array(
+    'arguments' => array('form' => NULL),
+    'file' => 'includes/admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function panelizer_menu() {
+  // Safety: go away if CTools is not at an appropriate version.
+  if (!defined('PANELS_REQUIRED_CTOOLS_API') || !module_invoke('ctools', 'api_version', PANELS_REQUIRED_CTOOLS_API)) {
+    return array();
+  }
+
+  // Configure settings pages.
+  $settings_base = array(
+    'access arguments' => array('administer panelizer'),
+    'file' => 'includes/admin.inc',
+  );
+
+  $items['admin/settings/panelizer'] = array(
+    'title' => 'Panelizer',
+    'description' => 'Configure panelizer availability and defaults',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('panelizer_settings_page_form'),
+    'type' => MENU_NORMAL_ITEM,
+  ) + $settings_base;
+
+  $items['admin/settings/panelizer/%/%'] = array(
+    'title callback' => 'panelizer_default_title_callback',
+    'title arguments' => array(3, 4),
+    'page callback' => 'panelizer_allowed_content_page',
+    'page arguments' => array(3, 4),
+    'type' => MENU_CALLBACK,
+  ) + $settings_base;
+
+  $items['admin/settings/panelizer/%/%/allowed'] = array(
+    'title' => 'Available content',
+    'page callback' => 'panelizer_allowed_content_page',
+    'page arguments' => array(3, 4),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  ) + $settings_base;
+
+  $items['admin/settings/panelizer/%/%/list'] = array(
+    'title' => 'List defaults',
+    'access callback' => 'panelizer_has_choice_callback',
+    'access arguments' => array(3, 4, ''),
+    'page callback' => 'panelizer_default_list_page',
+    'page arguments' => array(3, 4),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -6,
+  ) + $settings_base;
+
+  $tabs_base = array(
+    'access callback' => 'panelizer_has_no_choice_callback',
+    'access arguments' => array(3, 4),
+    'page arguments' => array(3, 4, 'default'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/admin.inc',
+  );
+
+  $items['admin/settings/panelizer/%/%/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'panelizer_default_settings_page',
+    'weight' => -5,
+  ) + $tabs_base;
+
+
+  $items['admin/settings/panelizer/%/%/context'] = array(
+    'title' => 'Contexts',
+    'page callback' => 'panelizer_default_context_page',
+    'weight' => -4,
+  ) + $tabs_base;
+
+  $items['admin/settings/panelizer/%/%/layout'] = array(
+    'title' => 'Layout',
+    'page callback' => 'panelizer_default_layout_page',
+    'weight' => -3,
+  ) + $tabs_base;
+
+  $items['admin/settings/panelizer/%/%/content'] = array(
+    'title' => 'Content',
+    'page callback' => 'panelizer_default_content_page',
+    'weight' => -2,
+  ) + $tabs_base;
+
+  $subtabs_base = array(
+    'access callback' => 'panelizer_has_choice_callback',
+    'access arguments' => array(3, 4, 5),
+    'page arguments' => array(3, 4, 5),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/admin.inc',
+  );
+
+  $items['admin/settings/panelizer/%/%/%'] = array(
+    'title' => 'Settings',
+    'page callback' => 'panelizer_default_settings_page',
+    'title callback' => 'panelizer_default_name_title_callback',
+    'type' => MENU_CALLBACK,
+  ) + $subtabs_base;
+
+  $items['admin/settings/panelizer/%/%/%/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'panelizer_default_settings_page',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -5,
+  ) + $subtabs_base;
+
+  $items['admin/settings/panelizer/%/%/%/context'] = array(
+    'title' => 'Contexts',
+    'page callback' => 'panelizer_default_context_page',
+    'weight' => -4,
+  ) + $subtabs_base;
+
+  $items['admin/settings/panelizer/%/%/%/layout'] = array(
+    'title' => 'Layout',
+    'page callback' => 'panelizer_default_layout_page',
+    'weight' => -3,
+  ) + $subtabs_base;
+
+  $items['admin/settings/panelizer/%/%/%/content'] = array(
+    'title' => 'Content',
+    'page callback' => 'panelizer_default_content_page',
+    'weight' => -2,
+  ) + $subtabs_base;
+
+  // Configure node editing pages
+  $base = array(
+    'access callback' => 'panelizer_edit_node_callback',
+    'access arguments' => array(1),
+    'page arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/node.inc',
+  );
+
+  $items['node/%node/panelizer'] = array(
+    'title' => 'Panelizer',
+    'page callback' => 'panelizer_edit_node_settings_page',
+    'weight' => 11,
+  ) + $base;
+
+  $items['node/%node/panelizer/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'panelizer_edit_node_settings_page',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 11,
+  ) + $base;
+
+  $items['node/%node/panelizer/context'] = array(
+    'title' => 'Context',
+    'page callback' => 'panelizer_edit_node_context_page',
+    'weight' => 12,
+  ) + $base;
+
+  $items['node/%node/panelizer/layout'] = array(
+    'title' => 'Layout',
+    'page callback' => 'panelizer_edit_node_layout_page',
+    'weight' => 13,
+  ) + $base;
+
+  $items['node/%node/panelizer/content'] = array(
+    'title' => 'Content',
+    'page callback' => 'panelizer_edit_node_content_page',
+    'weight' => 14,
+  ) + $base;
+
+  return $items;
+}
+
+// ---------------------------------------------------------------------------
+// Menu callbacks
+
+/**
+ * Determine if the current user has access to edit panelizer info on a node.
+ */
+function panelizer_edit_node_callback($node) {
+  if (!panelizer_is_panelized('node', $node->type)) {
+    return FALSE;
+  }
+
+  return node_access('update', $node);
+}
+
+/**
+ * Title callback to properly set the tile when editing panelizer defaults.
+ */
+function panelizer_default_title_callback($type, $key) {
+  switch ($type) {
+    case 'node':
+      $name = node_get_types('name', $key);
+      return check_plain($name);
+    case 'user':
+  }
+}
+
+/**
+ * Menu callback to determine if a type has a choice of defaults.
+ *
+ * We use this to make sure the right tabs appear.
+ */
+function panelizer_has_choice_callback($type, $key, $name = NULL) {
+  if (!user_access('administer panelizer')) {
+    return FALSE;
+  }
+
+  // Check to see if $name is valid
+  if ($name && !panelizer_load_default($type, $key, $name)) {
+    return FALSE;
+  }
+
+  return panelizer_has_choice($type, $key);
+}
+
+/**
+ * Menu callback to determine if a type has a choice of defaults.
+ *
+ * We use this to make sure the right tabs appear.
+ */
+function panelizer_has_no_choice_callback($type, $key) {
+  if (!user_access('administer panelizer')) {
+    return FALSE;
+  }
+
+  // If this type has defaults and is not allowed a choice, return true.
+  $settings = variable_get('panelizer_defaults', array());
+  return !empty($settings[$type][$key]['status']) && !empty($settings[$type][$key]['default']) && empty($settings[$type][$key]['choice']);
+}
+
+// ---------------------------------------------------------------------------
+// Node hooks
+
+// @todo -- need a nodeapi hook for insert/update so that node_save() can work
+// as expected if panelizer settings are attached to the node.
+
+// ---------------------------------------------------------------------------
+// Panelizer object access routines
+
+/**
+ * Get the panelizer type and key from a default name.
+ *
+ * @param $default_name
+ *   The default name, which should be in the format of TYPE_NAME
+ * @return
+ *   An array with two keys, the type (i.e, node, user) and the key.
+ */
+function panelizer_get_type_key($default_name) {
+  $separator = ':';
+  return @explode($separator, $default_name, 2);
+}
+
+/**
+ * Get the panelizer type and key and name
+ *
+ * @param $default_name
+ *   The default name, which should be in the format of TYPE_NAME
+ * @return
+ *   An array with three keys, the type (i.e, node, user), the key, and the name.
+ */
+function panelizer_get_type_key_name($load_name) {
+  $separator = ':';
+  return @explode($separator, $load_name, 3);
+}
+
+/**
+ * Determine if a given thing is panelized.
+ */
+function panelizer_is_panelized($type, $key) {
+  $settings = variable_get('panelizer_defaults', array());
+  return !empty($settings[$type][$key]['status']);
+}
+
+/**
+ * Determine if a given thing has a default panel.
+ */
+function panelizer_has_default($type, $key) {
+  $settings = variable_get('panelizer_defaults', array());
+  return !empty($settings[$type][$key]['status']) && !empty($settings[$type][$key]['default']);
+}
+
+/**
+ * Determine if a given thing can choose from a list of defaults.
+ */
+function panelizer_has_choice($type, $key) {
+  $settings = variable_get('panelizer_defaults', array());
+  return !empty($settings[$type][$key]['status']) && !empty($settings[$type][$key]['default']) && !empty($settings[$type][$key]['choice']);
+}
+
+/**
+ * Fetch the panelizer default record for a panelizer name.
+ *
+ * When configured properly, things can have default displays attached
+ * to them. This fetches the display, if there is one.
+ */
+function panelizer_load_default_by_name($load_name) {
+  list($type, $key, $name) = panelizer_get_type_key_name($load_name);
+
+  return _panelizer_load_default($type, $key, $name, $load_name);
+}
+
+/**
+ * Fetch the panelizer default record for a panelizer name.
+ *
+ * When configured properly, things can have default displays attached
+ * to them. This fetches the display, if there is one.
+ */
+function panelizer_load_default($type, $key, $name) {
+  if (!panelizer_has_default($type, $key)) {
+    return;
+  }
+
+  $load_name = $type . ':' . $key. ':' . $name;
+  return _panelizer_load_default($type, $key, $name, $load_name);
+}
+
+/**
+ * Load a panelizer default object.
+ */
+function _panelizer_load_default($type, $key, $name, $load_name) {
+  if (!panelizer_has_default($type, $key)) {
+    return;
+  }
+
+  ctools_include('export');
+  $panelizer = ctools_export_crud_load('panelizer_defaults', $load_name);
+  if (empty($panelizer)) {
+    $panelizer = ctools_export_crud_new('panelizer_defaults');
+    $panelizer->panelizer_type = $type;
+    $panelizer->panelizer_key = $key;
+    $panelizer->name = $load_name;
+    $panelizer->display = panelizer_get_default_display($type);
+  }
+
+  return $panelizer;
+}
+
+/**
+ * Export.inc callback to create a new panelizer.
+ */
+function panelizer_get_default_display($type) {
+  ctools_include($type, 'panelizer');
+  $function = 'panelizer_get_default_display_' . $type;
+  if (function_exists($function)) {
+    return $function();
+  }
+}
+
+/**
+ * Fetch the display associated with a panelizer object.
+ *
+ * The display may be stored on the object, which means either that it's
+ * loaded from an export, or has been previously loaded. If not, this will
+ * attempt to load it from the database and store it on the object.
+ *
+ * $object->display should never be accessed directly except here and
+ * other Panelizer database functions.
+ *
+ * @param $object
+ *   The panelizer object can be either a panelizer object associated with
+ *   a node, or a default object. They have the same datastructure.
+ *
+ * @return
+ *   A panels $display object.
+ */
+function panelizer_load_display(&$object) {
+  if (empty($object->display)) {
+    if (!empty($object->did)) {
+      $object->display = panels_load_display($object->did);
+    }
+    else {
+      $object->display = new panels_display;
+    }
+  }
+
+  return $object->display;
+}
+
+// ---------------------------------------------------------------------------
+// export.inc callbacks to handle proper in/out of our defaults
+
+/**
+ * export.inc callback to properly save a panelizer default.
+ */
+function panelizer_export_save_callback(&$object) {
+  if (!empty($object->display)) {
+    // First write the display
+    panels_save_display($panelizer->display);
+
+    // Make sure we have the did.
+    // @todo -- this should never spontaneously change on us, but we aren't
+    // checking that, either. We possibly should enforce a safety condition
+    // here.
+    $object->did = $panelizer->display->did;
+  }
+
+  // Then write the default
+  if ($object->export_type & EXPORT_IN_DATABASE) {
+    // Existing record.
+    $update = array('pnid');
+  }
+  else {
+    // New record.
+    $update = array();
+    $object->export_type = EXPORT_IN_DATABASE;
+  }
+
+  return drupal_write_record('panelizer_defaults', $object, $update);
+}
+
+/**
+ * export.inc callback to properly export a panelizer default.
+ */
+function panelizer_export_export_callback($object, $indent) {
+  $output = ctools_export_object('panelizer_defaults', $object, $indent);
+  $display = panelizer_load_display($object);
+  $output .= panels_export_display($display, $indent);
+  $output .= $indent . '$panelizer->display = $display;' . "\n";
+
+  return $output;
+}
+
+/**
+ * export.inc callback to properly delete a panelizer default.
+ */
+function panelizer_export_delete_callback($object) {
+  if (!empty($object->did)) {
+    panels_delete_display($object->did);
+  }
+
+  db_query("DELETE FROM {panelizer_defaults} WHERE name = '%s'", $object->name);
+}
+
+// ---------------------------------------------------------------------------
+// Context cache callbacks -- this really needs a less lame system someday.
+
+/**
+ * Fetch the panelizer object from the object cache.
+ *
+ * CTools clumsy context editing system requires caching. This lets us
+ * do it reasonably.
+ *
+ * @param $type
+ *   Can be something like 'node' or 'user' or 'default'.
+ * @param $key
+ *   Depends on the $type. Can be a nid, a uid or a default key.
+ */
+function panelizer_context_cache_get($type, $key) {
+  ctools_include('object-cache');
+  $cache = ctools_object_cache_get('panelizer_context_cache', $type . ':' . $key);
+  if (!empty($cache)) {
+    $cache->cached = TRUE;
+    return $cache;
+  }
+
+  switch ($type) {
+    case 'default':
+      return panelizer_load_default_by_name($key);
+    case 'node':
+      ctools_include('node', 'panelizer');
+      return panelizer_load_node_panelizer($key);
+    case 'user':
+  }
+}
+
+/**
+ * Store the panelizer object in the object cache.
+ *
+ * CTools clumsy context editing system requires caching. This lets us
+ * do it reasonably.
+ *
+ * @param $type
+ *   Can be something like 'node' or 'user' or 'default'.
+ * @param $key
+ *   Either the node type or the nid.
+ * @param $object
+ *   The cached object.
+ */
+function panelizer_context_cache_set($type, $key, $object) {
+  ctools_include('object-cache');
+  ctools_object_cache_set('panelizer_context_cache', $type . ':' . $key, $object);
+}
+
+/**
+ * Clear the panelizer object in the object cache.
+ *
+ * CTools clumsy context editing system requires caching. This lets us
+ * do it reasonably.
+ *
+ * @param $type
+ *   Can be something like 'node' or 'user' or 'default'.
+ * @param $key
+ *   Either the node type or the nid.
+ */
+function panelizer_context_cache_clear($type, $key) {
+  ctools_include('object-cache');
+  ctools_object_cache_clear('panelizer_context_cache', $type . ':' . $key);
+}
+
+// --------------------------------------------------------------------------
+// Panels edit cache contexts.
+
+/**
+ * Get display edit cache for a panel being edited.
+ *
+ * The key is the second half of the key in this form:
+ * panelizer:TYPE:KEY;
+ */
+function panelizer_panels_cache_get($argument) {
+  ctools_include('object-cache');
+  list($type, $key) = explode(':', $argument, 2);
+  $cache = ctools_object_cache_get('panelizer_display_cache', $type . ':' .$key);
+  if (!empty($cache)) {
+    $cache->cached = TRUE;
+    switch ($type) {
+      case 'default':
+        $panelizer = panelizer_load_default_by_name($key);
+        $cache->display->context = panelizer_get_contexts($panelizer);
+        break;
+      case 'node':
+        ctools_include('node', 'panelizer');
+        $panelizer = panelizer_load_node_panelizer($key);
+        $node = node_load($key);
+        $cache->display->context = panelizer_get_contexts($panelizer, $node);
+        break;
+      case 'user':
+    }
+
+    return $cache;
+  }
+
+  switch ($type) {
+    case 'default':
+      $panelizer = panelizer_load_default_by_name($key);
+      $cache = new stdClass();
+
+      ctools_include('common', 'panels');
+      $cache->display = panelizer_load_display($panelizer);
+      $cache->display->context = panelizer_get_contexts($panelizer);
+      $cache->display->cache_key = "panelizer:$type:$key";
+      $cache->content_types = panels_common_get_allowed_types('panelizer_node:' . $type, $cache->display->context);
+      return $cache;
+    case 'node':
+      ctools_include('node', 'panelizer');
+      $panelizer = panelizer_load_node_panelizer($key);
+      $cache = new stdClass();
+
+      ctools_include('common', 'panels');
+      $cache->display = panelizer_load_display($panelizer);
+      $node = node_load($key);
+      $cache->display->context = panelizer_get_contexts($panelizer, $node);
+      $cache->display->cache_key = "panelizer:$type:$key";
+      $cache->content_types = panels_common_get_allowed_types('panelizer_node:' . $node->type, $cache->display->context);
+      return $cache;
+    case 'user':
+  }
+}
+
+/**
+ * Store a display edit in progress in the page cache.
+ */
+function panelizer_panels_cache_set($argument, $cache) {
+  list($type, $key) = explode(':', $argument, 2);
+  ctools_include('object-cache');
+  ctools_object_cache_set('panelizer_display_cache', $type . ':' .$key, $cache);
+}
+
+/**
+ * Save all changes made to a display using the Page Manager page cache.
+ */
+function panelizer_panels_cache_clear($argument, $cache) {
+  list($type, $key) = explode(':', $argument, 2);
+  ctools_include('object-cache');
+  ctools_object_cache_clear('panelizer_display_cache', $type . ':' .$key);
+}
+
+/**
+ * Save all changes made to a display using the Page Manager page cache.
+ */
+function panelizer_panels_cache_save($argument, $cache) {
+  list($type, $key) = explode(':', $argument, 2);
+
+  switch ($type) {
+    case 'default':
+      $panelizer = panelizer_load_default($key);
+      $panelizer->display = $cache->display;
+      ctools_include('export');
+      ctools_export_crud_save('panelizer_defaults', $panelizer);
+      break;
+    case 'node':
+      ctools_include('node', 'panelizer');
+      $panelizer = panelizer_load_node_panelizer($key);
+      $panelizer->display = $cache->display;
+      panelizer_save_node_panelizer($panelizer);
+      break;
+    case 'user':
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Utility functions to get contexts.
+
+/**
+ * Add the base context to the panelizer object.
+ *
+ * For editing and displaying, we need the base context, which is the node the
+ * panel is attached to. During editing of defaults we don't know the node,
+ * though, so in that case we just provide the standard empty context.
+ */
+function panelizer_get_base_context($type, $object = NULL) {
+  ctools_include($type, 'panelizer');
+  $function = 'panelizer_get_base_context_' . $type;
+  if (function_exists($function)) {
+    return $function($object);
+  }
+}
+
+/**
+ * Fetch an object array from panelizer information.
+ */
+function panelizer_get_contexts($panelizer, $object = NULL) {
+  ctools_include('context');
+  if (empty($panelizer->base_contexts)) {
+    $panelizer->base_contexts = panelizer_get_base_context($panelizer->panelizer_type, $object);
+  }
+
+  return ctools_context_load_contexts($panelizer);
+}
+
+// ---------------------------------------------------------------------------
+// Contrib module hooks to provide needed functionality.
+
+/**
+ * Implementation of hook_ctools_plugin_directory() to let the system know
+ * where our task_handler plugins are.
+ */
+function panelizer_ctools_plugin_directory($owner, $plugin_type) {
+  if ($owner == 'page_manager') {
+    return 'plugins/' . $plugin_type;
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ */
+function panelizer_ctools_plugin_api($module, $api) {
+  if ($module == 'page_manager' && $api == 'pages_default') {
+    return array(
+      'version' => 1,
+      'path' => drupal_get_path('module', 'panelizer') . '/includes',
+    );
+  }
+}
+
+/**
+ * Implementation of hook_export_node_alter()
+ *
+ * Integrate with export.module for saving panel_nodes into code.
+ */
+function panelizer_export_node_alter(&$node, $original_node, $method) {
+  // @todo
+}
+
+/**
+ * Implementation of hook_panelizer_defaults_alter
+ *
+ * Remove the panels node because there is no point to panelizing it.
+ */
+function panelizer_panelizer_default_types_alter(&$types, $type) {
+  switch ($type) {
+    case 'node':
+      // Disallow the panel node type, since it's already a panel.
+      if (!empty($types['panel'])) {
+        unset($types['panel']);
+      }
+      break;
+    case 'user':
+  }
+}
