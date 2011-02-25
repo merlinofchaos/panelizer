@@ -9,7 +9,7 @@
 /**
  * Retrieve the panelizer panel associated with a node.
  */
-function panelizer_load_node_panelizer($node) {
+function panelizer_load_node_panelizer($node, $default_anyway = FALSE) {
   if (!empty($node) && is_numeric($node)) {
     $node = node_load($node);
   }
@@ -30,34 +30,34 @@ function panelizer_load_node_panelizer($node) {
     return $panelizer;
   }
 
+  // TODO: When we implement choice, we would look to see which default is in use.
+  $choice = 'default';
+
   // Is there a default?
-  if (panelizer_has_default('node', $node->type)) {
-    // TODO: When we implement choice, we would look to see which default is in use.
-    $panelizer = panelizer_load_default('node', $node->type, 'default');
-
-    // To ensure this saves properly later, we need to scrub out the data that
-    // is specific to the default.
-    unset($panelizer->name);
-    unset($panelizer->title);
-    $original_display = panelizer_load_display($panelizer);
-
-    // In order to ensure we don't actually use and modify the default display,
-    // we export and re-import it.
-    $code = panels_export_display($original_display);
-    ob_start();
-    eval($code);
-    ob_end_clean();
-
-    $panelizer->display = $display;
-    $panelizer->did = NULL;
-    $panelizer->nid = $node->nid;
-    $panelizer->new = TRUE;
-
-    return $panelizer;
+  $panelizer = panelizer_load_default('node', $node->type, $choice, $default_anyway);
+  if (!$panelizer) {
+    return FALSE;
   }
-  else {
-    // TODO return something meaningful here.
-  }
+
+  // To ensure this saves properly later, we need to scrub out the data that
+  // is specific to the default.
+  unset($panelizer->name);
+  unset($panelizer->title);
+  $original_display = panelizer_load_display($panelizer);
+
+  // In order to ensure we don't actually use and modify the default display,
+  // we export and re-import it.
+  $code = panels_export_display($original_display);
+  ob_start();
+  eval($code);
+  ob_end_clean();
+
+  $panelizer->display = $display;
+  $panelizer->did = NULL;
+  $panelizer->nid = $node->nid;
+  $panelizer->new = TRUE;
+
+  return $panelizer;
 }
 
 /**
@@ -94,7 +94,21 @@ function panelizer_save_node_panelizer($panelizer) {
 function panelizer_edit_node_settings_page($node) {
   $panelizer = panelizer_load_node_panelizer($node);
   if (empty($panelizer)) {
-    return MENU_NOT_FOUND;
+    // If this node is not yet panelized, and there is no default panel
+    // do to configuration, give them the option of panelizing it.
+    if (panelizer_has_default('node', $node->type)) {
+      return MENU_NOT_FOUND;
+    }
+
+    // Set the form to the Panelize It! form.
+    $form_id = 'panelizer_panelize_node_form';
+
+    // Fetch a special default panelizer that is only accessible with the
+    // default_anyway flag.
+    $panelizer = panelizer_load_node_panelizer($node, TRUE);
+  }
+  else {
+    $form_id = 'panelizer_settings_form';
   }
 
   $form_state = array(
@@ -104,7 +118,7 @@ function panelizer_edit_node_settings_page($node) {
 
   ctools_include('form');
   ctools_include('common', 'panelizer');
-  $output = ctools_build_form('panelizer_settings_form', $form_state);
+  $output = ctools_build_form($form_id, $form_state);
   if (!empty($form_state['executed'])) {
     drupal_set_message(t('The settings have been updated.'));
     panelizer_save_node_panelizer($panelizer);
@@ -112,6 +126,21 @@ function panelizer_edit_node_settings_page($node) {
   }
 
   return $output;
+}
+
+function panelizer_panelize_node_form(&$form_state) {
+  $form = array();
+
+  $form['markup'] = array(
+    '#value' => '<p>' . t('This node is not currently panelized.') . '</p>',
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Panelize it!'),
+  );
+
+  return $form;
 }
 
 /**

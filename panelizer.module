@@ -163,6 +163,8 @@ function panelizer_menu() {
 
   $items['node/%node/panelizer'] = array(
     'title' => 'Panelizer',
+    // make sure this is accessible to panelize nodes with no defaults.
+    'access arguments' => array(1, FALSE),
     'page callback' => 'panelizer_edit_node_settings_page',
     'weight' => 11,
   ) + $base;
@@ -201,9 +203,17 @@ function panelizer_menu() {
 /**
  * Determine if the current user has access to edit panelizer info on a node.
  */
-function panelizer_edit_node_callback($node) {
+function panelizer_edit_node_callback($node, $check_for_default = TRUE) {
   if (!panelizer_is_panelized('node', $node->type)) {
     return FALSE;
+  }
+
+  // If there isn't a default, check to see if this node is panelized.
+  if ($check_for_default && !panelizer_has_default('node', $node->type)) {
+    ctools_include('node', 'panelizer');
+    if (!panelizer_load_node_panelizer($node)) {
+      return FALSE;
+    }
   }
 
   return node_access('update', $node);
@@ -319,10 +329,10 @@ function panelizer_has_choice($type, $key) {
  * When configured properly, things can have default displays attached
  * to them. This fetches the display, if there is one.
  */
-function panelizer_load_default_by_name($load_name) {
+function panelizer_load_default_by_name($load_name, $default_anyway = FALSE) {
   list($type, $key, $name) = panelizer_get_type_key_name($load_name);
 
-  return _panelizer_load_default($type, $key, $name, $load_name);
+  return _panelizer_load_default($type, $key, $name, $load_name, $default_anyway);
 }
 
 /**
@@ -331,20 +341,16 @@ function panelizer_load_default_by_name($load_name) {
  * When configured properly, things can have default displays attached
  * to them. This fetches the display, if there is one.
  */
-function panelizer_load_default($type, $key, $name) {
-  if (!panelizer_has_default($type, $key)) {
-    return;
-  }
-
+function panelizer_load_default($type, $key, $name, $default_anyway = FALSE) {
   $load_name = $type . ':' . $key. ':' . $name;
-  return _panelizer_load_default($type, $key, $name, $load_name);
+  return _panelizer_load_default($type, $key, $name, $load_name, $default_anyway);
 }
 
 /**
  * Load a panelizer default object.
  */
-function _panelizer_load_default($type, $key, $name, $load_name) {
-  if (!panelizer_has_default($type, $key)) {
+function _panelizer_load_default($type, $key, $name, $load_name, $default_anyway = FALSE) {
+  if (!$default_anyway && !panelizer_has_default($type, $key)) {
     return;
   }
 
